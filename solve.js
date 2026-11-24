@@ -19,21 +19,12 @@ const HAS_ESCAPE_RE = /[&<>"']/;
  * `text` with & < > " and ' escaped. The engine's own replace is faster than a JavaScript loop, and a string holding
  * none of the five is returned as it is without allocating.
  *
- * Short strings are the ones a build repeats: a site title, a post title, a url, a tag name and a date each appear on
- * dozens of pages, so escaping them once and keeping the result saves that work over the whole run. Long strings (a
- * page's content, an excerpt) are escaped each time rather than kept, so the cache stays small.
+ * A build calls this about 189,000 times a case for 3.9M characters, and escaping is cheap on the few strings that hold
+ * a character to escape: a memo of the results cost about 20% of the whole run in Map lookups, so each call escapes.
  */
-const ESCAPE_CACHE_LIMIT = 20000;
-const ESCAPE_CACHE = new Map();
-
 function escapeHtml(text) {
   if (!HAS_ESCAPE_RE.test(text)) return text;
-  if (text.length > 200) return text.replace(ESCAPE_RE, replaceEscape);
-  const hit = ESCAPE_CACHE.get(text);
-  if (hit !== undefined) return hit;
-  const out = text.replace(ESCAPE_RE, replaceEscape);
-  if (ESCAPE_CACHE.size < ESCAPE_CACHE_LIMIT) ESCAPE_CACHE.set(text, out);
-  return out;
+  return text.replace(ESCAPE_RE, replaceEscape);
 }
 
 function replaceEscape(c) {
@@ -239,6 +230,8 @@ const ESCAPABLE = new Set([92, 96, 42, 95, 91, 93, 40, 41, 35, 43, 45, 46, 33, 6
 
 /** The characters, in this order, that make inline Markdown do anything at all. */
 const SPECIAL = new Set([92, 96, 42, 91]);
+/** The characters above, for the native regex: testing one string against it beats a Set lookup per character. */
+const HAS_SPECIAL_RE = /[\\`*[]/;
 
 function headingOf(line) {
   const m = HEADING.exec(line);
@@ -379,8 +372,7 @@ function findSingleStar(s, from) {
 
 /** Whether `s` holds no character inline Markdown acts on: such a string is just escaped text. */
 function plain(s) {
-  for (let i = 0; i < s.length; i++) if (SPECIAL.has(s.charCodeAt(i))) return false;
-  return true;
+  return !HAS_SPECIAL_RE.test(s);
 }
 
 /** One scan for the characters inline Markdown acts on; the native regex finds them faster than a JS loop. */
