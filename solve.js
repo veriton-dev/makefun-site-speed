@@ -181,22 +181,35 @@ function valueOf(key, raw) {
 
 /** A source's front matter and body: { data, body }, or { error } with the first reason it is refused. */
 function parseFrontMatter(text) {
-  const lines = text.split('\n');
-  if (lines[0] !== '---') return { error: 'no front matter' };
-  let close = -1;
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i] === '---') {
-      close = i;
+  const firstNl = text.indexOf('\n');
+  const firstLine = firstNl === -1 ? text : text.slice(0, firstNl);
+  if (firstLine !== '---') return { error: 'no front matter' };
+  if (firstNl === -1) return { error: 'the front matter is not closed' };
+  // Find the closing line by scanning for newlines rather than splitting the whole source: the body is the bulk of it
+  // and only the front matter's own lines are parsed.
+  let closeStart = -1;
+  let bodyStart = 0;
+  let pos = firstNl + 1;
+  while (pos <= text.length) {
+    const nl = text.indexOf('\n', pos);
+    const lineEnd = nl === -1 ? text.length : nl;
+    if (lineEnd - pos === 3 && text.startsWith('---', pos)) {
+      closeStart = pos;
+      bodyStart = nl === -1 ? text.length : nl + 1;
       break;
     }
+    if (nl === -1) break;
+    pos = nl + 1;
   }
-  if (close === -1) return { error: 'the front matter is not closed' };
+  if (closeStart === -1) return { error: 'the front matter is not closed' };
+  const head = text.slice(firstNl + 1, closeStart === firstNl + 1 ? closeStart : closeStart - 1);
+  const lines = head === '' ? [] : head.split('\n');
   const data = {};
-  for (let i = 1; i < close; i++) {
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (BLANK_LINE.test(line) || line.charCodeAt(0) === 35) continue;
     const m = FM_LINE.exec(line);
-    if (m === null) return { error: `line ${i + 1} is not "key: value"` };
+    if (m === null) return { error: `line ${i + 2} is not "key: value"` };
     const key = m[1];
     const raw = m[2] === undefined ? '' : m[2].replace(TRAILING_SPACE, '');
     if (!KEYS.has(key)) return { error: `unknown key "${key}"` };
@@ -207,7 +220,7 @@ function parseFrontMatter(text) {
     data[key] = v.value;
   }
   if (!Object.hasOwn(data, 'title')) return { error: 'no title' };
-  return { data, body: lines.slice(close + 1).join('\n') };
+  return { data, body: text.slice(bodyStart) };
 }
 
 // ---------------------------------------------------------------------------------- Markdown
