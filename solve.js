@@ -650,9 +650,18 @@ function renderNodes(nodes, scope, ctx, depth) {
         const xs = lookup(scope, n.path);
         if (!Array.isArray(xs)) break;
         const len = xs.length;
+        if (len === 0) break;
+        // One scope and one loop object for the whole loop: rendering is eager, so nothing outlives an iteration and
+        // rebuilding them per item only made garbage (163 posts over every list and page).
+        const loop = { index: 1, first: true, last: len === 1, length: len };
+        const vars = { [n.name]: xs[0], loop };
+        const inner = { vars, parent: scope };
         for (let k = 0; k < len; k++) {
-          const vars = { [n.name]: xs[k], loop: { index: k + 1, first: k === 0, last: k === len - 1, length: len } };
-          out += renderNodes(n.body, { vars, parent: scope }, ctx, depth);
+          vars[n.name] = xs[k];
+          loop.index = k + 1;
+          loop.first = k === 0;
+          loop.last = k === len - 1;
+          out += renderNodes(n.body, inner, ctx, depth);
         }
         break;
       }
