@@ -14,21 +14,22 @@
 const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const ESCAPE_RE = /[&<>"']/g;
 const HAS_ESCAPE_RE = /[&<>"']/;
-
 /**
- * `text` with & < > " and ' escaped. The engine's own replace is faster than a JavaScript loop, and a string holding
- * none of the five is returned as it is without allocating.
- *
- * A build calls this about 189,000 times a case for 3.9M characters, and escaping is cheap on the few strings that hold
- * a character to escape: a memo of the results cost about 20% of the whole run in Map lookups, so each call escapes.
+ * `text` with & < > " and ' escaped. A string holding none of the five is returned as it is without allocating, and one
+ * that does is copied between the characters to escape rather than handed to `replace` with a callback: the callback
+ * costs a call and a slice per character, which over the 18,000 lines a case holds with one is most of the work.
  */
 function escapeHtml(text) {
   if (!HAS_ESCAPE_RE.test(text)) return text;
-  return text.replace(ESCAPE_RE, replaceEscape);
-}
-
-function replaceEscape(c) {
-  return ESCAPE_MAP[c];
+  let out = '';
+  let last = 0;
+  ESCAPE_RE.lastIndex = 0;
+  let m;
+  while ((m = ESCAPE_RE.exec(text)) !== null) {
+    out += text.slice(last, m.index) + ESCAPE_MAP[m[0]];
+    last = m.index + 1;
+  }
+  return out + text.slice(last);
 }
 
 /** The most characters a slug keeps before a collision suffix. */
